@@ -9,6 +9,7 @@ import (
 	"github.com/parxyws/nego-fiber/internal/user/domain"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type UserRepositoryImpl struct {
@@ -118,10 +119,32 @@ func (u *UserRepositoryImpl) ReadById(ctx context.Context, entity *domain.User) 
 
 func (u *UserRepositoryImpl) ReadAllByRoles(ctx context.Context, metadata *mtd.Metadata) ([]domain.User, error) {
 	var users []domain.User
-	//tx := u.DB.WithContext(ctx)
-	//if err := tx.FindInBatches(); err != nil {
-	//	return nil, fmt.Errorf("UserRepository.ReadAllByRoles - %w", err)
+	tx := u.DB.WithContext(ctx)
+
+	orderPattern := clause.OrderBy{
+		Columns: []clause.OrderByColumn{
+			{Column: clause.Column{Name: "created_at"}, Desc: true},
+			{Column: clause.Column{Name: "id"}, Desc: true},
+		},
+	}
+
+	q := tx.Model(&domain.User{}).
+		Where("verified_at IS NOT NULL").
+		Clauses(orderPattern)
+
+	//if metadata.Cursor != nil && metadata.Cursor.NextCursor != "" {
+	//	createdAt := metadata.Cursor.CreatedAt
+	//	id := metadata.Cursor.ID
+	//
+	//	q = q.Where(`
+	//		(created_at < ?)
+	//		OR (created_at = ? AND id < ?)
+	//	`, createdAt, createdAt, id)
 	//}
+
+	if err := q.Limit(metadata.Pagination.PageLimit).Find(&users).Error; err != nil {
+		return nil, fmt.Errorf("UserRepository.ReadAllByRoles - %w", err)
+	}
 
 	return users, nil
 }
